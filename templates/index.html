@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera AI-VMD Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h1>🎥 Camera Manager</h1>
+            <div class="user-info">
+                <span class="user-name" id="currentUsername">User</span>
+                <span class="user-role-badge" id="currentUserRole">user</span>
+            </div>
+        </div>
+        
+        <nav class="sidebar-nav">
+            <button class="nav-item active" onclick="switchTab('dashboard')" data-tab="dashboard">
+                <span class="nav-icon">📊</span>
+                <span class="nav-label">Dashboard</span>
+            </button>
+            <button class="nav-item" onclick="switchTab('groups')" data-tab="groups">
+                <span class="nav-icon">📁</span>
+                <span class="nav-label">Groups</span>
+            </button>
+            <button class="nav-item" onclick="switchTab('activity')" data-tab="activity">
+                <span class="nav-icon">📋</span>
+                <span class="nav-label">Activity Log</span>
+            </button>
+            <button class="nav-item admin-only" onclick="switchTab('cameras')" data-tab="cameras" style="display: none;">
+                <span class="nav-icon">📹</span>
+                <span class="nav-label">Cameras</span>
+            </button>
+            <button class="nav-item admin-only" onclick="switchTab('credentials')" data-tab="credentials" style="display: none;">
+                <span class="nav-icon">🔑</span>
+                <span class="nav-label">Credentials</span>
+            </button>
+            <button class="nav-item admin-only" onclick="switchTab('users')" data-tab="users" style="display: none;">
+                <span class="nav-icon">👥</span>
+                <span class="nav-label">Users</span>
+            </button>
+        </nav>
+        
+        <div class="sidebar-footer">
+            <button class="btn-logout" onclick="logout()">
+                <span>🚪</span>
+                <span>Logout</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Dashboard Tab -->
+        <div id="dashboard" class="tab-content active">
+            <div class="page-header">
+                <h2>Dashboard</h2>
+                <p>System overview and quick actions</p>
+            </div>
+            
+            <div class="dashboard-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">📹</div>
+                    <div class="stat-info">
+                        <div class="stat-label">Total Cameras</div>
+                        <div class="stat-value" id="statCameras">0</div>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon">📁</div>
+                    <div class="stat-info">
+                        <div class="stat-label">Total Groups</div>
+                        <div class="stat-value" id="statGroups">0</div>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon">🔑</div>
+                    <div class="stat-info">
+                        <div class="stat-label">Credentials</div>
+                        <div class="stat-value" id="statCredentials">Not Set</div>
+                    </div>
+                </div>
+                
+                <div class="stat-card admin-only" style="display: none;">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-info">
+                        <div class="stat-label">Total Users</div>
+                        <div class="stat-value" id="statUsers">0</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="quick-actions">
+                <h3>Quick Actions</h3>
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="switchTab('groups')">
+                        📁 Manage Groups
+                    </button>
+                    <button class="btn btn-primary admin-only" onclick="switchTab('cameras')" style="display: none;">
+                        📹 View Cameras
+                    </button>
+                    <button class="btn btn-success admin-only" onclick="discoverCameras()" style="display: none;">
+                        🔍 Discover Cameras
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Groups Tab -->
+        <div id="groups" class="tab-content">
+            <div class="page-header">
+                <h2>Groups</h2>
+                <button class="btn btn-primary admin-only" onclick="showCreateGroupModal()" style="display: none;">➕ Create Group</button>
+            </div>
+            <div id="groupsContainer"></div>
+        </div>
+
+        <!-- Activity Log Tab -->
+        <div id="activity" class="tab-content">
+            <div class="page-header">
+                <h2>Activity Log</h2>
+                <button class="btn btn-primary" onclick="loadActivityLog()">🔄 Refresh</button>
+            </div>
+            <div id="activityLogContainer">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>User</th>
+                            <th>Action</th>
+                            <th>Target</th>
+                            <th>Cameras</th>
+                            <th>Result</th>
+                        </tr>
+                    </thead>
+                    <tbody id="activityLogTableBody">
+                        <tr>
+                            <td colspan="6" style="text-align: center; padding: 40px;">
+                                Loading activity log...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Cameras Tab -->
+        <div id="cameras" class="tab-content">
+            <div class="page-header">
+                <h2>Cameras</h2>
+                <div class="page-actions">
+                    <button class="btn btn-primary" onclick="reloadCameras()">🔄 Reload</button>
+                    <button class="btn btn-success" onclick="discoverCameras()">🔍 Discover</button>
+                    <button class="btn btn-primary" onclick="showAddManualCameraModal()">➕ Add Manual</button>
+                </div>
+            </div>
+            <div id="camerasContainer"></div>
+        </div>
+
+        <!-- Credentials Tab -->
+        <div id="credentials" class="tab-content">
+            <div class="page-header">
+                <h2>Camera Credentials</h2>
+                <p>Configure credentials for camera access</p>
+            </div>
+            
+            <div class="credentials-container">
+                <div id="credentialsStatus" class="credentials-status"></div>
+                
+                <form id="credentialsForm" class="form">
+                    <div class="form-group">
+                        <label for="credUsername">Username:</label>
+                        <input type="text" id="credUsername" name="credUsername" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="credPassword">Password:</label>
+                        <input type="password" id="credPassword" name="credPassword" required>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">💾 Save Credentials</button>
+                        <button type="button" class="btn btn-danger" onclick="deleteCredentials()">🗑️ Delete Credentials</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Users Tab (Admin Only) -->
+        <div id="users" class="tab-content admin-only" style="display: none;">
+            <div class="page-header">
+                <h2>User Management</h2>
+                <button class="btn btn-primary" onclick="showCreateUserModal()">➕ Create User</button>
+            </div>
+            
+            <div id="usersContainer" class="users-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Role</th>
+                            <th>Created</th>
+                            <th>Last Login</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTableBody">
+                        <!-- Users loaded here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Create Group Modal -->
+    <div id="createGroupModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeCreateGroupModal()">&times;</span>
+            <h2>Create New Group</h2>
+            <form id="createGroupForm" class="form">
+                <div class="form-group">
+                    <label for="groupName">Group Name:</label>
+                    <input type="text" id="groupName" name="groupName" required>
+                </div>
+                <div class="form-group">
+                    <label for="groupDescription">Description:</label>
+                    <textarea id="groupDescription" name="groupDescription" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Select Cameras (optional):</label>
+                    <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 10px;">
+                        You can add cameras now or add them later by editing the group.
+                    </p>
+                    <div id="createGroupCamerasList" class="cameras-list">
+                        <!-- Camera checkboxes will be loaded here -->
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">Create Group</button>
+                <button type="button" class="btn btn-secondary" onclick="closeCreateGroupModal()">Cancel</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Group Modal -->
+    <div id="editGroupModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeEditGroupModal()">&times;</span>
+            <h2>Edit Group</h2>
+            <form id="editGroupForm" class="form">
+                <input type="hidden" id="editGroupId">
+                <div class="form-group">
+                    <label for="editGroupName">Group Name:</label>
+                    <input type="text" id="editGroupName" name="editGroupName" required>
+                </div>
+                <div class="form-group">
+                    <label for="editGroupDescription">Description:</label>
+                    <textarea id="editGroupDescription" name="editGroupDescription" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Cameras in this group:</label>
+                    <div id="groupCamerasList" class="cameras-list">
+                        <!-- Camera checkboxes will be loaded here -->
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+                <button type="button" class="btn btn-secondary" onclick="closeEditGroupModal()">Cancel</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Camera AI Apps Modal -->
+    <div id="editAIAppsModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeEditAIAppsModal()">&times;</span>
+            <h2>Configure AI Applications</h2>
+            <p class="help-text">Select which AI applications to enable for <strong id="aiAppsCameraName"></strong></p>
+            
+            <input type="hidden" id="aiAppsCameraMac">
+            
+            <div id="aiAppsContainer" style="margin-top: 20px;">
+                <!-- AI apps will be loaded here -->
+            </div>
+            
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button class="btn btn-primary" onclick="saveAIApps()">💾 Save AI Apps</button>
+                <button class="btn btn-secondary" onclick="closeEditAIAppsModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Single Camera Control Modal -->
+    <div id="cameraControlModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeCameraControlModal()">&times;</span>
+            <h2 id="cameraControlTitle">Camera Control</h2>
+            <p class="help-text">Arm or disarm <strong id="controlCameraName"></strong></p>
+            
+            <input type="hidden" id="controlCameraMac">
+            
+            <div class="info-box" style="margin: 20px 0;">
+                <strong>Current AI Applications:</strong>
+                <div id="controlCameraApps" style="margin-top: 10px;">
+                    <!-- AI apps list will be loaded here -->
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-success" onclick="armSingleCamera()" style="flex: 1;">
+                    🛡️ Arm Camera
+                </button>
+                <button class="btn btn-warning" onclick="disarmSingleCamera()" style="flex: 1;">
+                    🔓 Disarm Camera
+                </button>
+            </div>
+            
+            <button class="btn btn-secondary" onclick="closeCameraControlModal()" style="margin-top: 10px; width: 100%;">
+                Close
+            </button>
+        </div>
+    </div>
+
+    <!-- Installed Apps Modal -->
+    <div id="installedAppsModal" class="modal">
+        <div class="modal-content modal-large">
+            <span class="close" onclick="closeInstalledAppsModal()">&times;</span>
+            <h2 id="installedAppsTitle">Installed AI Applications</h2>
+            <p class="help-text">Camera: <strong id="installedAppsCameraName"></strong></p>
+            
+            <div id="installedAppsContent" class="installed-apps-content">
+                <!-- Content will be loaded here -->
+            </div>
+            
+            <button class="btn btn-secondary" onclick="closeInstalledAppsModal()" style="margin-top: 20px;">
+                Close
+            </button>
+        </div>
+    </div>
+
+    <!-- Discovery Modal -->
+    <div id="discoveryModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeDiscoveryModal()">&times;</span>
+            <h2>Discovered Cameras</h2>
+
+            <div id="discoveryResults">
+                <!-- Discovery results will be shown here -->
+            </div>
+
+            <div style="margin-top: 20px;">
+                <button class="btn btn-primary" id="saveDiscoveredBtn" onclick="saveDiscoveredCameras()" style="display: none;">
+                    💾 Save to cameras.json
+                </button>
+                <button class="btn btn-secondary" onclick="closeDiscoveryModal()">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Manual Camera Modal -->
+    <div id="addManualCameraModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeAddManualCameraModal()">&times;</span>
+            <h2>Add Cameras Manually</h2>
+            <p class="help-text">Add cameras by IP address when automatic discovery is not available.</p>
+
+            <form id="addManualCameraForm" class="form">
+                <div class="form-group">
+                    <label for="manualIpAddresses">IP Address(es):</label>
+                    <textarea id="manualIpAddresses" name="manualIpAddresses" rows="4" required
+                        placeholder="Enter IP addresses, one per line or comma-separated.&#10;&#10;Examples:&#10;192.168.1.10&#10;192.168.1.10-20 (range)&#10;192.168.1.10, 192.168.1.15"></textarea>
+                    <small style="color: var(--text-secondary);">
+                        Supported formats: Single IP (192.168.1.10), Range (192.168.1.10-20), Multiple (comma or newline separated)
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label for="manualHttpPort">HTTP Port:</label>
+                    <input type="number" id="manualHttpPort" name="manualHttpPort" value="80" min="1" max="65535">
+                </div>
+
+                <div class="form-group">
+                    <label for="manualCameraNamePrefix">Camera Name Prefix:</label>
+                    <input type="text" id="manualCameraNamePrefix" name="manualCameraNamePrefix" value="Manual Camera"
+                        placeholder="e.g., Manual Camera, Lobby Cam">
+                    <small style="color: var(--text-secondary);">
+                        Cameras will be named with this prefix followed by a number (e.g., "Manual Camera 1")
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="manualEnhancedSecurity" name="manualEnhancedSecurity" checked>
+                        <span>Enable i-PRO Enhanced Security</span>
+                    </label>
+                    <small style="color: var(--text-secondary);">
+                        Enable this for i-PRO cameras with enhanced security features
+                    </small>
+                </div>
+
+                <div class="form-actions" style="margin-top: 20px;">
+                    <button type="submit" class="btn btn-primary">➕ Add Cameras</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeAddManualCameraModal()">Cancel</button>
+                </div>
+            </form>
+
+            <div id="addManualResults" style="display: none; margin-top: 20px;">
+                <!-- Results will be shown here after adding -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Create User Modal (Admin Only) -->
+    <div id="createUserModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeCreateUserModal()">&times;</span>
+            <h2>Create New User</h2>
+            <form id="createUserForm" class="form">
+                <div class="form-group">
+                    <label for="newUsername">Username:</label>
+                    <input type="text" id="newUsername" name="newUsername" required>
+                </div>
+                <div class="form-group">
+                    <label for="newPassword">Password:</label>
+                    <input type="password" id="newPassword" name="newPassword" required>
+                </div>
+                <div class="form-group">
+                    <label for="newUserRole">Role:</label>
+                    <select id="newUserRole" name="newUserRole" required>
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Create User</button>
+                <button type="button" class="btn btn-secondary" onclick="closeCreateUserModal()">Cancel</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Reset Password Modal (Admin Only) -->
+    <div id="resetPasswordModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeResetPasswordModal()">&times;</span>
+            <h2>Reset Password</h2>
+            <p>Reset password for user: <strong id="resetPasswordUsername"></strong></p>
+            <form id="resetPasswordForm" class="form">
+                <div class="form-group">
+                    <label for="resetNewPassword">New Password:</label>
+                    <input type="password" id="resetNewPassword" name="resetNewPassword" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Reset Password</button>
+                <button type="button" class="btn btn-secondary" onclick="closeResetPasswordModal()">Cancel</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Results Modal -->
+    <div id="resultsModal" class="modal">
+        <div class="modal-content modal-large">
+            <span class="close" onclick="closeResultsModal()">&times;</span>
+            <h2 id="resultsTitle">Results</h2>
+            
+            <div class="results-summary" id="resultsSummary"></div>
+            
+            <div class="results-details" id="resultsDetails"></div>
+            
+            <button class="btn btn-primary" onclick="closeResultsModal()">Close</button>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="loadingText">Processing...</div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
