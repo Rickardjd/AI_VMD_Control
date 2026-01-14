@@ -10,6 +10,7 @@ A Flask-based web application for managing i-PRO IP camera AI-VMD (Video Motion 
   - IP Range (short): `192.168.1.10-20`
   - IP Range (full): `192.168.1.10-192.168.1.20`
   - Multiple IPs: comma or newline separated
+- **Camera Details Editing** - Update camera name, model, and MAC address from the UI
 - **Group Management** - Organize cameras into logical groups for batch operations
 - **AI-VMD Control** - Arm/disarm AI video motion detection on individual cameras or entire groups
 - **Multi-App Support** - Control multiple AI applications per camera (AI-VMD, AI-People Detection, AI-Vehicle, etc.)
@@ -78,6 +79,14 @@ Click "Add Manual" and enter IP addresses in any of these formats:
 - `192.168.1.10-192.168.1.20` - Full IP range
 - Multiple entries separated by commas or newlines
 
+### Editing Camera Details
+Click the pencil icon (✏️) on any camera to edit:
+- **Camera Name** - Friendly display name
+- **Model** - Camera model identifier
+- **MAC Address** - Hardware address (format: `xx:xx:xx:xx:xx:xx`)
+
+Note: To change a camera's IP address, delete and re-add the camera.
+
 ### Arming/Disarming
 - **Individual Camera**: Click the controller icon on any camera
 - **Group**: Use the Arm/Disarm buttons on a group card
@@ -90,6 +99,7 @@ Click "Add Manual" and enter IP addresses in any of these formats:
 | `/api/cameras/discover` | POST | Discover cameras on network |
 | `/api/cameras/add-manual` | POST | Add cameras by IP address |
 | `/api/cameras/<mac>` | DELETE | Delete a camera |
+| `/api/cameras/<mac>/update` | PUT | Update camera details (name, model, MAC) |
 | `/api/cameras/<mac>/arm` | POST | Arm AI-VMD on camera |
 | `/api/cameras/<mac>/disarm` | POST | Disarm AI-VMD on camera |
 | `/api/groups` | GET/POST | List/create groups |
