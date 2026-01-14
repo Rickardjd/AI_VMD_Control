@@ -441,6 +441,9 @@ function renderCameras() {
                         <td>
                             <div class="camera-actions">
                                 ${currentUser && currentUser.role === 'admin' ? `
+                                    <button class="btn btn-secondary" onclick="showEditCameraModal('${camera.mac_address}')" title="Edit Camera Details">
+                                        ✏️
+                                    </button>
                                     <button class="btn btn-primary" onclick="editCameraAIApps('${camera.mac_address}')" title="Configure AI Apps">
                                         ⚙️
                                     </button>
@@ -741,6 +744,73 @@ async function deleteCamera(macAddress) {
             showNotification(data.message, 'success');
             await loadCameras();
             await loadSystemStatus();
+        }
+    } catch (error) {
+        hideLoading();
+    }
+}
+
+// Edit Camera Details
+function showEditCameraModal(macAddress) {
+    const camera = currentCameras.find(c => c.mac_address === macAddress);
+    if (!camera) {
+        alert('Camera not found');
+        return;
+    }
+
+    // Populate form
+    document.getElementById('editCameraOriginalMac').value = camera.mac_address;
+    document.getElementById('editCameraCurrentName').textContent = camera.camera_name;
+    document.getElementById('editCameraName').value = camera.camera_name;
+    document.getElementById('editCameraModel').value = camera.model_name;
+    document.getElementById('editCameraMac').value = camera.mac_address;
+
+    // Show modal
+    document.getElementById('editCameraModal').classList.add('active');
+}
+
+function closeEditCameraModal() {
+    document.getElementById('editCameraModal').classList.remove('active');
+}
+
+async function updateCameraDetails(event) {
+    event.preventDefault();
+
+    const originalMac = document.getElementById('editCameraOriginalMac').value;
+    const newName = document.getElementById('editCameraName').value.trim();
+    const newModel = document.getElementById('editCameraModel').value.trim();
+    const newMac = document.getElementById('editCameraMac').value.trim().toLowerCase();
+
+    if (!newName) {
+        alert('Camera name is required');
+        return;
+    }
+
+    // Validate MAC address format
+    const macPattern = /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i;
+    if (!macPattern.test(newMac)) {
+        alert('Invalid MAC address format. Use format: xx:xx:xx:xx:xx:xx');
+        return;
+    }
+
+    showLoading('Updating camera...');
+
+    try {
+        const data = await apiCall(`/cameras/${originalMac}/update`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                camera_name: newName,
+                model_name: newModel,
+                mac_address: newMac
+            })
+        });
+
+        hideLoading();
+
+        if (data.success) {
+            closeEditCameraModal();
+            showNotification(data.message, 'success');
+            await loadCameras();
         }
     } catch (error) {
         hideLoading();
@@ -1341,7 +1411,12 @@ function setupForms() {
     if (document.getElementById('addManualCameraForm')) {
         document.getElementById('addManualCameraForm').addEventListener('submit', addManualCameras);
     }
-    
+
+    // Edit camera form
+    if (document.getElementById('editCameraForm')) {
+        document.getElementById('editCameraForm').addEventListener('submit', updateCameraDetails);
+    }
+
     // Create user form (if admin)
     if (document.getElementById('createUserForm')) {
         document.getElementById('createUserForm').addEventListener('submit', createUser);

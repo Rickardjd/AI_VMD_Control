@@ -824,6 +824,93 @@ def api_cameras_add_manual():
         }), 500
 
 
+@app.route('/api/cameras/<mac_address>/update', methods=['PUT'])
+@require_admin
+def api_camera_update(mac_address):
+    """Update camera properties (MAC address, model, camera name)"""
+    global cameras_list
+
+    try:
+        data = request.json or {}
+
+        # Find camera
+        camera = next((c for c in cameras_list if c.mac_address == mac_address), None)
+        if not camera:
+            return jsonify({
+                'success': False,
+                'message': 'Camera not found'
+            }), 404
+
+        # Get new values (use existing if not provided)
+        new_mac = data.get('mac_address', camera.mac_address).strip().lower()
+        new_model = data.get('model_name', camera.model_name).strip()
+        new_name = data.get('camera_name', camera.camera_name).strip()
+
+        # Validate MAC address format if changed
+        if new_mac != camera.mac_address:
+            mac_pattern = r'^([0-9a-f]{2}:){5}[0-9a-f]{2}$'
+            if not re.match(mac_pattern, new_mac):
+                return jsonify({
+                    'success': False,
+                    'message': 'Invalid MAC address format. Use format: xx:xx:xx:xx:xx:xx'
+                }), 400
+
+            # Check for duplicate MAC
+            existing = next((c for c in cameras_list if c.mac_address == new_mac), None)
+            if existing:
+                return jsonify({
+                    'success': False,
+                    'message': f'MAC address already exists for camera "{existing.camera_name}"'
+                }), 400
+
+        # Validate camera name
+        if not new_name:
+            return jsonify({
+                'success': False,
+                'message': 'Camera name cannot be empty'
+            }), 400
+
+        # Load existing cameras.json
+        with open(CAMERAS_FILE, 'r') as f:
+            camera_file_data = json.load(f)
+
+        # Update camera in file
+        for cam in camera_file_data['cameras']:
+            if cam.get('mac_address') == mac_address:
+                cam['mac_address'] = new_mac
+                cam['model_name'] = new_model
+                cam['camera_name'] = new_name
+                break
+
+        # Save to file
+        with open(CAMERAS_FILE, 'w') as f:
+            json.dump(camera_file_data, f, indent=2)
+
+        # Update in memory
+        camera.mac_address = new_mac
+        camera.model_name = new_model
+        camera.camera_name = new_name
+
+        logger.info(f"Updated camera: {new_name} ({new_mac})")
+
+        return jsonify({
+            'success': True,
+            'message': f'Camera "{new_name}" updated successfully',
+            'camera': {
+                'mac_address': new_mac,
+                'model_name': new_model,
+                'camera_name': new_name
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Error updating camera: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error updating camera: {str(e)}'
+        }), 500
+
+
 @app.route('/api/cameras/<mac_address>', methods=['DELETE'])
 @require_admin
 def api_camera_delete(mac_address):
