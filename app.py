@@ -140,6 +140,93 @@ def generate_mac_address() -> str:
 
     return mac
 
+
+def fetch_camera_info_by_ip(ip_address: str, http_port: int = 80, username: str = None, password: str = None) -> dict:
+    """
+    Fetch camera information directly from the device by IP address.
+
+    Args:
+        ip_address: Camera IP address
+        http_port: HTTP port (default 80)
+        username: Camera username
+        password: Camera password
+
+    Returns:
+        Dict with camera_name, model_name, mac_address (or None for each if not found)
+    """
+    import requests
+    from requests.auth import HTTPDigestAuth
+
+    result = {
+        'camera_name': None,
+        'model_name': None,
+        'mac_address': None,
+        'success': False,
+        'errors': []
+    }
+
+    if not username or not password:
+        result['errors'].append('No credentials provided')
+        return result
+
+    protocol = "https" if http_port == 443 else "http"
+    base_url = f"{protocol}://{ip_address}:{http_port}"
+
+    # Fetch camera title from /cgi-bin/getdata
+    try:
+        response = requests.get(
+            f"{base_url}/cgi-bin/getdata",
+            auth=HTTPDigestAuth(username, password),
+            timeout=10,
+            verify=False
+        )
+        if response.status_code == 200:
+            for line in response.text.split('\n'):
+                if 'CAMTITLE=' in line:
+                    result['camera_name'] = line.split('CAMTITLE=', 1)[1].strip()
+                    break
+        else:
+            result['errors'].append(f"getdata returned HTTP {response.status_code}")
+    except requests.exceptions.Timeout:
+        result['errors'].append(f"Timeout connecting to {ip_address}")
+    except Exception as e:
+        result['errors'].append(f"Failed to fetch camera title: {str(e)}")
+
+    # Fetch MAC and model from /cgi-bin/getinfo?FILE=1
+    try:
+        response = requests.get(
+            f"{base_url}/cgi-bin/getinfo?FILE=1",
+            auth=HTTPDigestAuth(username, password),
+            timeout=10,
+            verify=False
+        )
+        if response.status_code == 200:
+            for line in response.text.split('\n'):
+                line = line.strip()
+                if line.startswith('MAC='):
+                    mac_raw = line.split('MAC=', 1)[1].strip()
+                    # Format MAC address with colons if needed
+                    if ':' not in mac_raw and len(mac_raw) == 12:
+                        mac_formatted = ':'.join(mac_raw[i:i+2] for i in range(0, 12, 2)).lower()
+                        result['mac_address'] = mac_formatted
+                    else:
+                        result['mac_address'] = mac_raw.lower()
+                elif line.startswith('NAME='):
+                    result['model_name'] = line.split('NAME=', 1)[1].strip()
+        else:
+            result['errors'].append(f"getinfo returned HTTP {response.status_code}")
+    except requests.exceptions.Timeout:
+        if f"Timeout connecting to {ip_address}" not in result['errors']:
+            result['errors'].append(f"Timeout connecting to {ip_address}")
+    except Exception as e:
+        result['errors'].append(f"Failed to fetch MAC/model: {str(e)}")
+
+    # Mark as success if we got at least some data
+    if result['camera_name'] or result['model_name'] or result['mac_address']:
+        result['success'] = True
+
+    return result
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -707,6 +794,7 @@ def api_ai_apps():
 def api_cameras_add_manual():
     """
     Add cameras manually by IP address or IP range.
+    Automatically queries devices for MAC, model, and camera name.
 
     Supports:
     - Single IP: "192.168.1.10"
@@ -738,6 +826,10 @@ def api_cameras_add_manual():
                 'message': 'No valid IP addresses found in input'
             }), 400
 
+        # Get credentials for querying cameras
+        creds = credential_manager.get_credentials()
+        username, password = creds if creds else (None, None)
+
         # Get existing MAC addresses to avoid duplicates
         existing_macs = {cam.mac_address for cam in cameras_list}
         existing_ips = {cam.ip_address for cam in cameras_list}
@@ -752,20 +844,32 @@ def api_cameras_add_manual():
                 skipped_ips.append({'ip': ip, 'reason': 'IP already exists'})
                 continue
 
-            # Generate unique MAC address
-            mac = generate_mac_address()
-            while mac in existing_macs:
+            # Try to fetch camera info from device
+            device_info = fetch_camera_info_by_ip(ip, int(http_port), username, password)
+
+            # Use fetched MAC or generate one
+            if device_info.get('mac_address') and device_info['mac_address'] not in existing_macs:
+                mac = device_info['mac_address']
+            else:
                 mac = generate_mac_address()
+                while mac in existing_macs:
+                    mac = generate_mac_address()
             existing_macs.add(mac)
 
-            # Create camera name
-            camera_index = len(cameras_list) + len(added_cameras) + 1
-            camera_name = f"{camera_name_prefix} {camera_index}" if camera_name_prefix else f"Camera {ip}"
+            # Use fetched camera name or generate one
+            if device_info.get('camera_name'):
+                camera_name = device_info['camera_name']
+            else:
+                camera_index = len(cameras_list) + len(added_cameras) + 1
+                camera_name = f"{camera_name_prefix} {camera_index}" if camera_name_prefix else f"Camera {ip}"
+
+            # Use fetched model or default
+            model_name = device_info.get('model_name') or 'Manual'
 
             # Create camera object
             camera_data = {
                 'mac_address': mac,
-                'model_name': 'Manual',
+                'model_name': model_name,
                 'ip_address': ip,
                 'subnet_mask': '255.255.255.0',
                 'gateway': '.'.join(ip.split('.')[:3]) + '.1',
@@ -774,7 +878,8 @@ def api_cameras_add_manual():
                 'camera_name': camera_name,
                 'installids': [],
                 'enhanced_security': enhanced_security,
-                'actual_app_count': 0
+                'actual_app_count': 0,
+                'fetched_from_device': device_info.get('success', False)
             }
 
             added_cameras.append(camera_data)
