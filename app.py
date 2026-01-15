@@ -144,6 +144,7 @@ def generate_mac_address() -> str:
 def fetch_camera_info_by_ip(ip_address: str, http_port: int = 80, username: str = None, password: str = None) -> dict:
     """
     Fetch camera information directly from the device by IP address.
+    Tries Digest Auth first, then falls back to Basic Auth.
 
     Args:
         ip_address: Camera IP address
@@ -155,7 +156,7 @@ def fetch_camera_info_by_ip(ip_address: str, http_port: int = 80, username: str 
         Dict with camera_name, model_name, mac_address (or None for each if not found)
     """
     import requests
-    from requests.auth import HTTPDigestAuth
+    from requests.auth import HTTPDigestAuth, HTTPBasicAuth
 
     result = {
         'camera_name': None,
@@ -172,54 +173,79 @@ def fetch_camera_info_by_ip(ip_address: str, http_port: int = 80, username: str 
     protocol = "https" if http_port == 443 else "http"
     base_url = f"{protocol}://{ip_address}:{http_port}"
 
+    # Auth methods to try
+    auth_methods = [
+        ('Digest', HTTPDigestAuth(username, password)),
+        ('Basic', HTTPBasicAuth(username, password))
+    ]
+
     # Fetch camera title from /cgi-bin/getdata
-    try:
-        response = requests.get(
-            f"{base_url}/cgi-bin/getdata",
-            auth=HTTPDigestAuth(username, password),
-            timeout=10,
-            verify=False
-        )
-        if response.status_code == 200:
-            for line in response.text.split('\n'):
-                if 'CAMTITLE=' in line:
-                    result['camera_name'] = line.split('CAMTITLE=', 1)[1].strip()
-                    break
-        else:
-            result['errors'].append(f"getdata returned HTTP {response.status_code}")
-    except requests.exceptions.Timeout:
-        result['errors'].append(f"Timeout connecting to {ip_address}")
-    except Exception as e:
-        result['errors'].append(f"Failed to fetch camera title: {str(e)}")
+    for auth_name, auth_method in auth_methods:
+        try:
+            response = requests.get(
+                f"{base_url}/cgi-bin/getdata",
+                auth=auth_method,
+                timeout=10,
+                verify=False
+            )
+            if response.status_code == 200:
+                for line in response.text.split('\n'):
+                    line = line.strip()
+                    # Handle both formats: CAMTITLE=value and CAMTITLE,"value"
+                    if line.startswith('CAMTITLE'):
+                        if 'CAMTITLE=' in line:
+                            result['camera_name'] = line.split('CAMTITLE=', 1)[1].strip().strip('"')
+                        elif 'CAMTITLE,' in line:
+                            # CSV format: CAMTITLE,"value"
+                            parts = line.split(',', 1)
+                            if len(parts) > 1:
+                                result['camera_name'] = parts[1].strip().strip('"')
+                        break
+                break  # Success, don't try other auth methods
+            elif response.status_code not in [401, 403]:
+                result['errors'].append(f"getdata returned HTTP {response.status_code}")
+                break
+        except requests.exceptions.Timeout:
+            result['errors'].append(f"Timeout connecting to {ip_address}")
+            break
+        except Exception as e:
+            result['errors'].append(f"Failed to fetch camera title: {str(e)}")
+            break
 
     # Fetch MAC and model from /cgi-bin/getinfo?FILE=1
-    try:
-        response = requests.get(
-            f"{base_url}/cgi-bin/getinfo?FILE=1",
-            auth=HTTPDigestAuth(username, password),
-            timeout=10,
-            verify=False
-        )
-        if response.status_code == 200:
-            for line in response.text.split('\n'):
-                line = line.strip()
-                if line.startswith('MAC='):
-                    mac_raw = line.split('MAC=', 1)[1].strip()
-                    # Format MAC address with colons if needed
-                    if ':' not in mac_raw and len(mac_raw) == 12:
-                        mac_formatted = ':'.join(mac_raw[i:i+2] for i in range(0, 12, 2)).lower()
-                        result['mac_address'] = mac_formatted
-                    else:
-                        result['mac_address'] = mac_raw.lower()
-                elif line.startswith('NAME='):
-                    result['model_name'] = line.split('NAME=', 1)[1].strip()
-        else:
-            result['errors'].append(f"getinfo returned HTTP {response.status_code}")
-    except requests.exceptions.Timeout:
-        if f"Timeout connecting to {ip_address}" not in result['errors']:
-            result['errors'].append(f"Timeout connecting to {ip_address}")
-    except Exception as e:
-        result['errors'].append(f"Failed to fetch MAC/model: {str(e)}")
+    for auth_name, auth_method in auth_methods:
+        try:
+            response = requests.get(
+                f"{base_url}/cgi-bin/getinfo?FILE=1",
+                auth=auth_method,
+                timeout=10,
+                verify=False
+            )
+            if response.status_code == 200:
+                for line in response.text.split('\n'):
+                    line = line.strip()
+                    if line.startswith('MAC='):
+                        mac_raw = line.split('MAC=', 1)[1].strip()
+                        # Normalize MAC address to use colons
+                        # Handle formats: d42dc52a8d13, d4-2d-c5-2a-8d-13, d4:2d:c5:2a:8d:13
+                        mac_clean = mac_raw.replace('-', '').replace(':', '').lower()
+                        if len(mac_clean) == 12:
+                            result['mac_address'] = ':'.join(mac_clean[i:i+2] for i in range(0, 12, 2))
+                        else:
+                            result['mac_address'] = mac_raw.lower().replace('-', ':')
+                    elif line.startswith('NAME='):
+                        result['model_name'] = line.split('NAME=', 1)[1].strip()
+                break  # Success, don't try other auth methods
+            elif response.status_code not in [401, 403]:
+                result['errors'].append(f"getinfo returned HTTP {response.status_code}")
+                break
+        except requests.exceptions.Timeout:
+            if f"Timeout connecting to {ip_address}" not in result['errors']:
+                result['errors'].append(f"Timeout connecting to {ip_address}")
+            break
+        except Exception as e:
+            result['errors'].append(f"Failed to fetch MAC/model: {str(e)}")
+            break
 
     # Mark as success if we got at least some data
     if result['camera_name'] or result['model_name'] or result['mac_address']:
@@ -972,10 +998,16 @@ def api_camera_fetch_info(mac_address):
                 verify=False
             )
             if response.status_code == 200:
-                # Parse response - look for CAMTITLE=value
+                # Parse response - handle both CAMTITLE=value and CAMTITLE,"value" formats
                 for line in response.text.split('\n'):
-                    if 'CAMTITLE=' in line:
-                        fetched_data['camera_name'] = line.split('CAMTITLE=', 1)[1].strip()
+                    line = line.strip()
+                    if line.startswith('CAMTITLE'):
+                        if 'CAMTITLE=' in line:
+                            fetched_data['camera_name'] = line.split('CAMTITLE=', 1)[1].strip().strip('"')
+                        elif 'CAMTITLE,' in line:
+                            parts = line.split(',', 1)
+                            if len(parts) > 1:
+                                fetched_data['camera_name'] = parts[1].strip().strip('"')
                         break
             else:
                 errors.append(f"getdata returned HTTP {response.status_code}")
@@ -995,14 +1027,14 @@ def api_camera_fetch_info(mac_address):
                 for line in response.text.split('\n'):
                     line = line.strip()
                     if line.startswith('MAC='):
-                        # Format MAC address with colons if needed
                         mac_raw = line.split('MAC=', 1)[1].strip()
-                        # Check if it needs formatting (no colons)
-                        if ':' not in mac_raw and len(mac_raw) == 12:
-                            mac_formatted = ':'.join(mac_raw[i:i+2] for i in range(0, 12, 2)).lower()
-                            fetched_data['mac_address'] = mac_formatted
+                        # Normalize MAC address to use colons
+                        # Handle formats: d42dc52a8d13, d4-2d-c5-2a-8d-13, d4:2d:c5:2a:8d:13
+                        mac_clean = mac_raw.replace('-', '').replace(':', '').lower()
+                        if len(mac_clean) == 12:
+                            fetched_data['mac_address'] = ':'.join(mac_clean[i:i+2] for i in range(0, 12, 2))
                         else:
-                            fetched_data['mac_address'] = mac_raw.lower()
+                            fetched_data['mac_address'] = mac_raw.lower().replace('-', ':')
                     elif line.startswith('NAME='):
                         fetched_data['model_name'] = line.split('NAME=', 1)[1].strip()
             else:
