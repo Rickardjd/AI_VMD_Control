@@ -85,6 +85,8 @@ Click the pencil icon (✏️) on any camera to edit:
 - **Model** - Camera model identifier
 - **MAC Address** - Hardware address (format: `xx:xx:xx:xx:xx:xx`)
 
+Use the **"Fetch from Camera"** button to automatically retrieve current values directly from the camera. You can still manually edit values after fetching.
+
 Note: To change a camera's IP address, delete and re-add the camera.
 
 ### Arming/Disarming
@@ -100,6 +102,7 @@ Note: To change a camera's IP address, delete and re-add the camera.
 | `/api/cameras/add-manual` | POST | Add cameras by IP address |
 | `/api/cameras/<mac>` | DELETE | Delete a camera |
 | `/api/cameras/<mac>/update` | PUT | Update camera details (name, model, MAC) |
+| `/api/cameras/<mac>/fetch-info` | GET | Fetch camera details from device |
 | `/api/cameras/<mac>/arm` | POST | Arm AI-VMD on camera |
 | `/api/cameras/<mac>/disarm` | POST | Disarm AI-VMD on camera |
 | `/api/groups` | GET/POST | List/create groups |
