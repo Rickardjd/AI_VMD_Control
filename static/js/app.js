@@ -761,9 +761,14 @@ function showEditCameraModal(macAddress) {
     // Populate form
     document.getElementById('editCameraOriginalMac').value = camera.mac_address;
     document.getElementById('editCameraCurrentName').textContent = camera.camera_name;
+    document.getElementById('editCameraIpDisplay').textContent = camera.ip_address;
     document.getElementById('editCameraName').value = camera.camera_name;
     document.getElementById('editCameraModel').value = camera.model_name;
     document.getElementById('editCameraMac').value = camera.mac_address;
+
+    // Reset rescan status
+    document.getElementById('rescanStatus').style.display = 'none';
+    document.getElementById('rescanCameraBtn').disabled = false;
 
     // Show modal
     document.getElementById('editCameraModal').classList.add('active');
@@ -771,6 +776,67 @@ function showEditCameraModal(macAddress) {
 
 function closeEditCameraModal() {
     document.getElementById('editCameraModal').classList.remove('active');
+}
+
+async function rescanCameraInfo() {
+    const originalMac = document.getElementById('editCameraOriginalMac').value;
+    const rescanBtn = document.getElementById('rescanCameraBtn');
+    const statusDiv = document.getElementById('rescanStatus');
+
+    // Disable button and show loading state
+    rescanBtn.disabled = true;
+    rescanBtn.textContent = '🔄 Fetching...';
+    statusDiv.style.display = 'none';
+
+    try {
+        const data = await apiCall(`/cameras/${originalMac}/fetch-info`, {
+            method: 'GET'
+        });
+
+        if (data.success && data.data) {
+            // Update form fields with fetched data
+            if (data.data.camera_name) {
+                document.getElementById('editCameraName').value = data.data.camera_name;
+            }
+            if (data.data.model_name) {
+                document.getElementById('editCameraModel').value = data.data.model_name;
+            }
+            if (data.data.mac_address) {
+                document.getElementById('editCameraMac').value = data.data.mac_address;
+            }
+
+            // Show success status
+            let statusMsg = 'Successfully fetched: ';
+            const fetched = [];
+            if (data.data.camera_name) fetched.push('Camera Name');
+            if (data.data.model_name) fetched.push('Model');
+            if (data.data.mac_address) fetched.push('MAC Address');
+            statusMsg += fetched.join(', ');
+
+            if (data.errors && data.errors.length > 0) {
+                statusMsg += '<br><small style="color: var(--warning-color);">Warnings: ' + data.errors.join(', ') + '</small>';
+            }
+
+            statusDiv.innerHTML = statusMsg;
+            statusDiv.style.background = 'var(--success-color)';
+            statusDiv.style.color = 'white';
+            statusDiv.style.display = 'block';
+
+            showNotification('Camera info fetched successfully', 'success');
+        } else {
+            throw new Error(data.message || 'Failed to fetch camera info');
+        }
+    } catch (error) {
+        // Show error status
+        statusDiv.innerHTML = 'Failed to fetch camera info: ' + (error.message || 'Unknown error');
+        statusDiv.style.background = 'var(--danger-color)';
+        statusDiv.style.color = 'white';
+        statusDiv.style.display = 'block';
+    } finally {
+        // Re-enable button
+        rescanBtn.disabled = false;
+        rescanBtn.textContent = '🔄 Fetch from Camera';
+    }
 }
 
 async function updateCameraDetails(event) {

@@ -420,7 +420,18 @@
         <div class="modal-content">
             <span class="close" onclick="closeEditCameraModal()">&times;</span>
             <h2>Edit Camera Details</h2>
-            <p class="help-text">Update camera properties for <strong id="editCameraCurrentName"></strong></p>
+            <p class="help-text">Update camera properties for <strong id="editCameraCurrentName"></strong> (<span id="editCameraIpDisplay"></span>)</p>
+
+            <div style="margin-bottom: 20px;">
+                <button type="button" class="btn btn-primary" onclick="rescanCameraInfo()" id="rescanCameraBtn">
+                    🔄 Fetch from Camera
+                </button>
+                <small style="color: var(--text-secondary); margin-left: 10px;">
+                    Get current values directly from the camera
+                </small>
+            </div>
+
+            <div id="rescanStatus" style="display: none; margin-bottom: 16px; padding: 10px; border-radius: 8px;"></div>
 
             <form id="editCameraForm" class="form">
                 <input type="hidden" id="editCameraOriginalMac">

@@ -824,6 +824,111 @@ def api_cameras_add_manual():
         }), 500
 
 
+@app.route('/api/cameras/<mac_address>/fetch-info', methods=['GET'])
+@require_admin
+def api_camera_fetch_info(mac_address):
+    """Fetch camera information directly from the device"""
+    global cameras_list
+
+    try:
+        # Find camera
+        camera = next((c for c in cameras_list if c.mac_address == mac_address), None)
+        if not camera:
+            return jsonify({
+                'success': False,
+                'message': 'Camera not found'
+            }), 404
+
+        # Get credentials
+        creds = credential_manager.get_credentials()
+        if not creds:
+            return jsonify({
+                'success': False,
+                'message': 'No camera credentials configured'
+            }), 400
+
+        username, password = creds
+        protocol = "https" if camera.http_port == 443 else "http"
+        base_url = f"{protocol}://{camera.ip_address}:{camera.http_port}"
+
+        fetched_data = {}
+        errors = []
+
+        # Import auth classes
+        from requests.auth import HTTPDigestAuth, HTTPBasicAuth
+        import requests
+
+        # Fetch camera title from /cgi-bin/getdata
+        try:
+            response = requests.get(
+                f"{base_url}/cgi-bin/getdata",
+                auth=HTTPDigestAuth(username, password),
+                timeout=10,
+                verify=False
+            )
+            if response.status_code == 200:
+                # Parse response - look for CAMTITLE=value
+                for line in response.text.split('\n'):
+                    if 'CAMTITLE=' in line:
+                        fetched_data['camera_name'] = line.split('CAMTITLE=', 1)[1].strip()
+                        break
+            else:
+                errors.append(f"getdata returned HTTP {response.status_code}")
+        except Exception as e:
+            errors.append(f"Failed to fetch camera title: {str(e)}")
+
+        # Fetch MAC and model from /cgi-bin/getinfo?FILE=1
+        try:
+            response = requests.get(
+                f"{base_url}/cgi-bin/getinfo?FILE=1",
+                auth=HTTPDigestAuth(username, password),
+                timeout=10,
+                verify=False
+            )
+            if response.status_code == 200:
+                # Parse response - look for MAC= and NAME=
+                for line in response.text.split('\n'):
+                    line = line.strip()
+                    if line.startswith('MAC='):
+                        # Format MAC address with colons if needed
+                        mac_raw = line.split('MAC=', 1)[1].strip()
+                        # Check if it needs formatting (no colons)
+                        if ':' not in mac_raw and len(mac_raw) == 12:
+                            mac_formatted = ':'.join(mac_raw[i:i+2] for i in range(0, 12, 2)).lower()
+                            fetched_data['mac_address'] = mac_formatted
+                        else:
+                            fetched_data['mac_address'] = mac_raw.lower()
+                    elif line.startswith('NAME='):
+                        fetched_data['model_name'] = line.split('NAME=', 1)[1].strip()
+            else:
+                errors.append(f"getinfo returned HTTP {response.status_code}")
+        except Exception as e:
+            errors.append(f"Failed to fetch MAC/model: {str(e)}")
+
+        if not fetched_data:
+            return jsonify({
+                'success': False,
+                'message': 'Could not fetch any data from camera',
+                'errors': errors
+            }), 500
+
+        logger.info(f"Fetched info from camera {camera.ip_address}: {fetched_data}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Camera info fetched successfully',
+            'data': fetched_data,
+            'errors': errors if errors else None
+        })
+
+    except Exception as e:
+        logger.error(f"Error fetching camera info: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Error fetching camera info: {str(e)}'
+        }), 500
+
+
 @app.route('/api/cameras/<mac_address>/update', methods=['PUT'])
 @require_admin
 def api_camera_update(mac_address):
