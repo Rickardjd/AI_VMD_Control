@@ -892,7 +892,7 @@ def api_cameras_add_manual():
             # Use fetched model or default
             model_name = device_info.get('model_name') or 'Manual'
 
-            # Create camera object
+            # Create camera object (only include fields that Camera dataclass accepts)
             camera_data = {
                 'mac_address': mac,
                 'model_name': model_name,
@@ -904,8 +904,7 @@ def api_cameras_add_manual():
                 'camera_name': camera_name,
                 'installids': [],
                 'enhanced_security': enhanced_security,
-                'actual_app_count': 0,
-                'fetched_from_device': device_info.get('success', False)
+                'actual_app_count': 0
             }
 
             added_cameras.append(camera_data)

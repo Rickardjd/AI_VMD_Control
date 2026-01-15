@@ -699,25 +699,31 @@ class CameraManager:
 def load_cameras_from_json(json_path: str) -> List[Camera]:
     """
     Load cameras from JSON file
-    
+
     Args:
         json_path: Path to JSON file
-        
+
     Returns:
         List of Camera objects
     """
+    # Get valid Camera field names
+    import dataclasses
+    valid_fields = {f.name for f in dataclasses.fields(Camera)}
+
     try:
         with open(json_path, 'r') as f:
             data = json.load(f)
-        
+
         cameras = []
         for cam_data in data.get('cameras', []):
-            camera = Camera(**cam_data)
+            # Filter out unknown fields to prevent TypeError
+            filtered_data = {k: v for k, v in cam_data.items() if k in valid_fields}
+            camera = Camera(**filtered_data)
             cameras.append(camera)
-        
+
         logger.info(f"Loaded {len(cameras)} cameras from {json_path}")
         return cameras
-        
+
     except FileNotFoundError:
         logger.error(f"File not found: {json_path}")
         raise
