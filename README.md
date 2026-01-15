@@ -79,6 +79,8 @@ Click "Add Manual" and enter IP addresses in any of these formats:
 - `192.168.1.10-192.168.1.20` - Full IP range
 - Multiple entries separated by commas or newlines
 
+When adding cameras, the system automatically queries each device to fetch the camera name, model, and MAC address. If credentials are configured and the device is reachable, these values are populated automatically. Otherwise, fallback values are used.
+
 ### Editing Camera Details
 Click the pencil icon (✏️) on any camera to edit:
 - **Camera Name** - Friendly display name
